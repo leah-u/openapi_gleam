@@ -1,9 +1,12 @@
 import argv
 import decode
+import gleam/dict
 import gleam/dynamic.{type Dynamic}
+import gleam/function
 import gleam/io
 import gleam/json
 import gleam/option.{type Option, None, Some}
+import gleam/set
 import simplifile
 
 pub fn main() {
@@ -30,6 +33,8 @@ pub type OpenApiDocument {
     /// A list of Server Objects, which provide connectivity information to a target server.
     servers: List(OpenApiServer),
     // paths: 
+    /// An element to hold various schemas for the document.
+    components: OpenApiComponents,
   )
 }
 
@@ -38,11 +43,13 @@ fn document_decoder() {
     use openapi_version <- decode.parameter
     use info <- decode.parameter
     use servers <- decode.parameter
-    OpenApiDocument(openapi_version:, info:, servers:)
+    use components <- decode.parameter
+    OpenApiDocument(openapi_version:, info:, servers:, components:)
   })
   |> decode.field("openapi", decode.string)
   |> decode.field("info", info_decoder())
   |> decode.field("servers", decode.list(server_decoder()))
+  |> decode.field("components", components_decoder())
 }
 
 /// The available paths and operations for the API.
@@ -170,6 +177,84 @@ fn server_decoder() {
   })
   |> decode.field("url", decode.string)
   |> decode.field("description", decode.optional(decode.string))
+}
+
+pub type OpenApiComponents {
+  OpenApiComponents(schemas: dict.Dict(String, OpenApiSchema))
+}
+
+fn components_decoder() {
+  decode.into({
+    use schemas <- decode.parameter
+    OpenApiComponents(schemas:)
+  })
+  |> decode.field("schemas", decode.dict(decode.string, schema_decoder()))
+}
+
+pub type OpenApiSchema {
+  Object(properties: dict.Dict(String, OpenApiSchema))
+  String
+  Integer
+  Optional(type_: OpenApiSchema)
+  Reference(path: String)
+  Array(type_: OpenApiSchema)
+}
+
+fn schema_decoder() -> decode.Decoder(OpenApiSchema) {
+  decode.one_of([
+    decode.into({
+      use type_ <- decode.parameter
+      type_
+    })
+      |> decode.field("type", decode.string)
+      |> decode.then(fn(type_) {
+        case type_ {
+          "object" -> object_decoder()
+          "integer" -> decode.into(Integer)
+          "string" -> decode.into(String)
+          "array" -> array_decoder()
+          _ -> decode.fail("invalid type: `" <> type_ <> "`")
+        }
+      }),
+    decode.into({
+      use path <- decode.parameter
+      Reference(path:)
+    })
+      |> decode.field("$ref", decode.string),
+  ])
+}
+
+fn object_decoder() -> decode.Decoder(OpenApiSchema) {
+  decode.into({
+    use required <- decode.parameter
+    use properties <- decode.parameter
+
+    let required =
+      required
+      |> option.unwrap([])
+      |> set.from_list
+
+    let properties =
+      properties
+      |> dict.map_values(fn(name, type_) {
+        case set.contains(required, name) {
+          True -> type_
+          False -> Optional(type_)
+        }
+      })
+
+    Object(properties:)
+  })
+  |> decode.field("required", decode.optional(decode.list(decode.string)))
+  |> decode.field("properties", decode.dict(decode.string, schema_decoder()))
+}
+
+fn array_decoder() -> decode.Decoder(OpenApiSchema) {
+  decode.into({
+    use type_ <- decode.parameter
+    Array(type_:)
+  })
+  |> decode.field("items", schema_decoder())
 }
 
 pub fn decode(
