@@ -1,5 +1,182 @@
+import argv
+import decode
+import gleam/dynamic.{type Dynamic}
 import gleam/io
+import gleam/json
+import gleam/option.{type Option, None, Some}
+import simplifile
 
 pub fn main() {
-  io.println("Hello from openapi!")
+  case argv.load().arguments {
+    [openapi_file] -> {
+      io.println("Opening file `" <> openapi_file <> "`")
+      let assert Ok(json) = simplifile.read(openapi_file)
+      json.decode(json, decode) |> io.debug
+      Nil
+    }
+    _ -> {
+      io.println_error("Please specify an OpenApi file")
+      exit(1)
+    }
+  }
 }
+
+pub type OpenApiDocument {
+  OpenApiDocument(
+    /// The OpenAPI version number of this document.
+    openapi_version: String,
+    /// Metadata about this API.
+    info: OpenApiInfo,
+    /// A list of Server Objects, which provide connectivity information to a target server.
+    servers: List(OpenApiServer),
+    // paths: 
+  )
+}
+
+fn document_decoder() {
+  decode.into({
+    use openapi_version <- decode.parameter
+    use info <- decode.parameter
+    use servers <- decode.parameter
+    OpenApiDocument(openapi_version:, info:, servers:)
+  })
+  |> decode.field("openapi", decode.string)
+  |> decode.field("info", info_decoder())
+  |> decode.field("servers", decode.list(server_decoder()))
+}
+
+/// The available paths and operations for the API.
+pub type OpenApiInfo {
+  OpenApiInfo(
+    /// The title of the API.
+    title: String,
+    /// A short summary of the API.
+    summary: Option(String),
+    /// A description of the API.
+    description: Option(String),
+    /// A URL to the Terms of Service for the API in the form of a URL.
+    terms_of_service: Option(String),
+    ///	The contact information for the exposed API.
+    contact: Option(OpenApiContact),
+    /// The license information for the exposed API.
+    license: Option(OpenApiLicense),
+    /// The version of the OpenAPI document (which is distinct from the OpenAPI
+    /// Specification version or the API implementation version).
+    version: String,
+  )
+}
+
+fn info_decoder() {
+  decode.into({
+    use title <- decode.parameter
+    use summary <- decode.parameter
+    use description <- decode.parameter
+    use terms_of_service <- decode.parameter
+    use contact <- decode.parameter
+    use license <- decode.parameter
+    use version <- decode.parameter
+    OpenApiInfo(
+      title:,
+      summary:,
+      description:,
+      terms_of_service:,
+      contact:,
+      license:,
+      version:,
+    )
+  })
+  |> decode.field("title", decode.string)
+  |> decode.field("summary", decode.optional(decode.string))
+  |> decode.field("description", decode.optional(decode.string))
+  |> decode.field("termsOfService", decode.optional(decode.string))
+  |> decode.field("contact", decode.optional(contact_decoder()))
+  |> decode.field("license", decode.optional(license_decoder()))
+  |> decode.field("version", decode.string)
+}
+
+pub type OpenApiContact {
+  OpenApiContact(
+    /// The identifying name of the contact person/organization.
+    name: Option(String),
+    /// The URL pointing to the contact information.
+    url: Option(String),
+    /// The email address of the contact person/organization.
+    email: Option(String),
+  )
+}
+
+fn contact_decoder() {
+  decode.into({
+    use name <- decode.parameter
+    use url <- decode.parameter
+    use email <- decode.parameter
+    OpenApiContact(name:, url:, email:)
+  })
+  |> decode.field("name", decode.optional(decode.string))
+  |> decode.field("url", decode.optional(decode.string))
+  |> decode.field("email", decode.optional(decode.string))
+}
+
+pub type OpenApiLicense {
+  OpenApiLicense(
+    /// The license name used for the API.
+    name: String,
+  )
+  OpenApiLicenseWithIdentifier(
+    /// The license name used for the API.
+    name: String,
+    /// An SPDX license expression for the API.
+    identifier: String,
+  )
+  OpenApiLicenseWithUrl(
+    /// The license name used for the API.
+    name: String,
+    /// A URL to the license used for the API.
+    url: String,
+  )
+}
+
+fn license_decoder() {
+  decode.into({
+    use name <- decode.parameter
+    use identifier <- decode.parameter
+    use url <- decode.parameter
+    case identifier, url {
+      _, Some(url) -> OpenApiLicenseWithUrl(name:, url:)
+      Some(identifier), _ -> OpenApiLicenseWithIdentifier(name:, identifier:)
+      None, None -> OpenApiLicense(name:)
+    }
+  })
+  |> decode.field("name", decode.string)
+  |> decode.field("identifier", decode.optional(decode.string))
+  |> decode.field("url", decode.optional(decode.string))
+}
+
+pub type OpenApiServer {
+  OpenApiServer(
+    /// A URL to the target host.
+    url: String,
+    /// An optional string describing the host designated by the URL.
+    description: Option(String),
+    // variables 	Map[string, Server Variable Object] 	A map between a variable name and its value. The value is used for substitution in the server's URL template.
+  )
+}
+
+fn server_decoder() {
+  decode.into({
+    use url <- decode.parameter
+    use description <- decode.parameter
+    OpenApiServer(url:, description:)
+  })
+  |> decode.field("url", decode.string)
+  |> decode.field("description", decode.optional(decode.string))
+}
+
+pub fn decode(
+  json: Dynamic,
+) -> Result(OpenApiDocument, List(dynamic.DecodeError)) {
+  decode.from(document_decoder(), json)
+}
+
+@external(erlang, "openapi_ffi", "exit")
+pub fn exit(n: Int) -> Nil
