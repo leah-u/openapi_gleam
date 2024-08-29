@@ -5,6 +5,7 @@ import gleam/dynamic.{type Dynamic}
 import gleam/function
 import gleam/io
 import gleam/json
+import gleam/list
 import gleam/option.{type Option, None, Some}
 import gleam/set
 import simplifile
@@ -14,7 +15,8 @@ pub fn main() {
     [openapi_file] -> {
       io.println("Opening file `" <> openapi_file <> "`")
       let assert Ok(json) = simplifile.read(openapi_file)
-      json.decode(json, decode) |> io.debug
+      let assert Ok(document) = json.decode(json, decode) |> io.debug
+      codegen(document)
       Nil
     }
     _ -> {
@@ -261,6 +263,52 @@ pub fn decode(
   json: Dynamic,
 ) -> Result(OpenApiDocument, List(dynamic.DecodeError)) {
   decode.from(document_decoder(), json)
+}
+
+fn type_name(of type_: OpenApiSchema, in document: OpenApiDocument) -> String {
+  case type_ {
+    Integer -> "Int"
+    String -> "String"
+    Optional(type_:) -> "Option(" <> type_name(of: type_, in: document) <> ")"
+    Array(type_:) -> "List(" <> type_name(of: type_, in: document) <> ")"
+    Object(properties:) -> todo
+    Reference(path:) -> todo
+  }
+}
+
+pub fn codegen(document: OpenApiDocument) {
+  let types =
+    document.components.schemas
+    |> dict.to_list
+    |> list.filter_map(fn(schema) {
+      let #(name, type_) = schema
+      case type_ {
+        Object(properties) -> {
+          let out = "pub type " <> name <> " {\n  " <> name <> "("
+          let properties_amount = dict.size(properties)
+          let out =
+            dict.to_list(properties)
+            |> list.index_fold(out, fn(out, property, index) {
+              let #(name, type_) = property
+              let out =
+                out <> name <> ": " <> type_name(in: document, of: type_)
+              case index < properties_amount - 1 {
+                True -> out <> ", "
+                False -> out
+              }
+            })
+          let out = out <> ")\n}"
+          Ok(out)
+        }
+        _ -> Error(Nil)
+      }
+    })
+
+  let code = "import gleam/option.{type Option}"
+  let code = list.fold(types, code, fn(code, type_) { code <> "\n\n" <> type_ })
+
+  list.each(types, io.println)
+  simplifile.write(to: "./src/petstore_gen.gleam", contents: code)
 }
 
 @external(erlang, "openapi_ffi", "exit")
