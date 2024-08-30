@@ -311,5 +311,5 @@ pub fn codegen(document: OpenApiDocument) {
   simplifile.write(to: "./src/petstore_gen.gleam", contents: code)
 }
 
-@external(erlang, "openapi_ffi", "exit")
+@external(erlang, "glowup_ffi", "exit")
 pub fn exit(n: Int) -> Nil

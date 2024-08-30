@@ -3,7 +3,7 @@ import gleam/json
 import gleam/option.{None, Some}
 import gleeunit
 import gleeunit/should
-import openapi
+import glowup
 import simplifile
 
 pub fn main() {
@@ -13,47 +13,47 @@ pub fn main() {
 pub fn petstore_parse_test() {
   simplifile.read("petstore.json")
   |> should.be_ok
-  |> json.decode(openapi.decode)
+  |> json.decode(glowup.decode)
   |> should.be_ok
-  |> should.equal(openapi.OpenApiDocument(
+  |> should.equal(glowup.OpenApiDocument(
     openapi_version: "3.0.0",
-    info: openapi.OpenApiInfo(
+    info: glowup.OpenApiInfo(
       title: "Swagger Petstore",
       summary: None,
-      license: Some(openapi.OpenApiLicense(name: "MIT")),
+      license: Some(glowup.OpenApiLicense(name: "MIT")),
       contact: None,
       description: None,
       terms_of_service: None,
       version: "1.0.0",
     ),
     servers: [
-      openapi.OpenApiServer(
+      glowup.OpenApiServer(
         url: "http://petstore.swagger.io/v1",
         description: None,
       ),
     ],
-    components: openapi.OpenApiComponents(
+    components: glowup.OpenApiComponents(
       dict.from_list([
         #(
           "Error",
-          openapi.Object(
+          glowup.Object(
             dict.from_list([
-              #("code", openapi.Integer),
-              #("message", openapi.String),
+              #("code", glowup.Integer),
+              #("message", glowup.String),
             ]),
           ),
         ),
         #(
           "Pet",
-          openapi.Object(
+          glowup.Object(
             dict.from_list([
-              #("id", openapi.Integer),
-              #("name", openapi.String),
-              #("tag", openapi.Optional(openapi.String)),
+              #("id", glowup.Integer),
+              #("name", glowup.String),
+              #("tag", glowup.Optional(glowup.String)),
             ]),
           ),
         ),
-        #("Pets", openapi.Array(openapi.Reference("#/components/schemas/Pet"))),
+        #("Pets", glowup.Array(glowup.Reference("#/components/schemas/Pet"))),
       ]),
     ),
   ))

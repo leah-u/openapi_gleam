@@ -1,4 +1,4 @@
-name = "openapi"
+name = "glowup"
 version = "0.1.0"
 
 gleam = ">= 1.4.0"
